@@ -1,7 +1,7 @@
 """
-Read JSON files in PHEME tarball.
+Read JSON files in PHEME-journalism data set.
 
-PHEME is an EU FP7 project aimed at analyzing rumours and "false news" on 
+PHEME is an EU FP7 project aimed at analyzing rumours and "false news" on
 social media. One of the goals is to predict rumour veracity from language use.
 https://www.pheme.eu/
 
