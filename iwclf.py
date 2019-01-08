@@ -4,7 +4,7 @@
 import numpy as np
 import scipy.stats as st
 from scipy.spatial.distance import cdist
-import sklearn as sk
+
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.model_selection import cross_val_predict

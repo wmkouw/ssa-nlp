@@ -14,7 +14,7 @@ import json
 import matplotlib.pyplot as plt
 
 # Load results
-results = pd.read_csv('results/seq-rumver_PHEMEj.csv')
+results = pd.read_csv('results/results_rumEval17.csv')
 
 # Find rumours
 rumours = np.unique(results['rumours'])

@@ -108,4 +108,4 @@ performance = pd.DataFrame({'err_n': perf_n,
                             'rumours': rums_array})
 
 # Write to file
-performance.to_csv('./results/seq-rumver_PHEMEj.csv')
+performance.to_csv('./results/results_rumEval17.csv')
