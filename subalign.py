@@ -3,12 +3,14 @@
 
 import numpy as np
 import scipy.stats as st
-from scipy.linalg import eig, eigh
+from scipy.linalg import eig, eigh, svd
+from scipy.spatial.distance import pdist, squareform
 
 from sklearn.decomposition import PCA
 from sklearn.svm import LinearSVC, SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, Ridge
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV, \
+    RidgeClassifier, RidgeClassifierCV
 from sklearn.model_selection import cross_val_predict
 from sklearn.calibration import CalibratedClassifierCV
 from os.path import basename
@@ -64,7 +66,7 @@ class SubspaceAlignedClassifier(object):
             if l2_regularization:
 
                 # Logistic regression model
-                self.clf = LogisticRegression(C=self.l2)
+                self.clf = LogisticRegression(C=self.l2, solver='lbfgs')
 
             else:
                 # Logistic regression model
@@ -72,8 +74,14 @@ class SubspaceAlignedClassifier(object):
 
         elif self.loss in ('squared', 'qd', 'quadratic'):
 
-            # Least-squares model
-            self.clf = Ridge(alpha=self.l2)
+            if l2_regularization:
+
+                # Logistic regression model
+                self.clf = RidgeClassifier(alpha=self.l2, solver='lbfgs')
+
+            else:
+                # Logistic regression model
+                self.clf = RidgeClassifierCV(cv=5)
 
         elif self.loss in ('hinge', 'linsvm', 'linsvc'):
 
@@ -92,9 +100,77 @@ class SubspaceAlignedClassifier(object):
         # Whether model has been trained
         self.is_trained = False
 
-    def is_pos_def(self, X):
+    def is_pos_def(self, A):
         """Check for positive definiteness."""
-        return np.all(np.linalg.eigvals(X) > 0)
+        return np.all(np.real(np.linalg.eigvals(A)) > 0)
+
+    def reg_cov(self, X):
+        """
+        Regularize covariance matrix until non-singular.
+
+        Parameters
+        ----------
+        C : array
+            square symmetric covariance matrix.
+
+        Returns
+        -------
+        C : array
+            regularized covariance matrix.
+
+        """
+        # Compute mean of data
+        muX = np.mean(X, axis=0, keepdims=1)
+
+        # Compute covariance matrix without regularization
+        SX = np.cov((X - muX).T)
+
+        # Initialize regularization parameter
+        reg = 1e-6
+
+        # Keep going until non-singular
+        while not self.is_pos_def(SX):
+
+            # Compute covariance matrix with regularization
+            SX = np.cov((X - muX).T) + reg*np.eye(X.shape[1])
+
+            # Increment reg
+            reg *= 10
+
+        # Report regularization
+        print('Final regularization parameter = {}'.format(reg))
+
+        return SX
+
+    def zca_whiten(self, X):
+        """
+        Perform ZCA whitening (aka Mahalanobis whitening).
+
+        Parameters
+        ----------
+        X : array (M samples x D features)
+            data matrix.
+
+        Returns
+        -------
+        X : array (M samples x D features)
+            whitened data.
+
+        """
+        # Covariance matrix
+        Sigma = np.cov(X.T)
+
+        # Singular value decomposition
+        U, S, V = svd(Sigma)
+
+        # Whitening constant to prevent division by zero
+        epsilon = 1e-5
+
+        # ZCA whitening matrix
+        W = U @ np.diag(1.0 / np.sqrt(S + epsilon)) @ V
+
+        # Apply whitening matrix
+        return X @ W
 
     def align_data(self, X, Z, CX, CZ, V):
         """
@@ -425,8 +501,14 @@ class SemiSubspaceAlignedClassifier(object):
 
         elif self.loss in ('squared', 'qd', 'quadratic'):
 
-            # Least-squares model
-            self.clf = Ridge(alpha=self.l2)
+            if l2_regularization:
+
+                # Logistic regression model
+                self.clf = RidgeClassifier(alpha=self.l2, solver='lbfgs')
+
+            else:
+                # Logistic regression model
+                self.clf = RidgeClassifierCV(cv=5)
 
         elif self.loss in ('hinge', 'linsvm', 'linsvc'):
 
@@ -445,9 +527,100 @@ class SemiSubspaceAlignedClassifier(object):
         # Whether model has been trained
         self.is_trained = False
 
-    def is_pos_def(self, X):
-        """Check for positive definiteness."""
-        return np.all(np.linalg.eigvals(X) > 0)
+    def is_pos_def(self, A):
+        """
+        Check for positive definiteness.
+
+        Parameters
+        ---------
+        A : array
+            square symmetric matrix.
+
+        Returns
+        -------
+        bool
+            whether matrix is positive-definite.
+            Warning! Returns false for arrays containing inf or NaN.
+
+
+        """
+        # Check for valid numbers
+        if np.any(np.isnan(A)) or np.any(np.isinf(A)):
+            return False
+
+        else:
+            return np.all(np.real(np.linalg.eigvals(A)) > 0)
+
+    def find_medioid(self, X, Y):
+        """
+        Find point with minimal distance to all other points.
+
+        Parameters
+        ----------
+        X : array
+            data set, with N samples x D features.
+        Y : array
+            labels to select for which samples to compute distances.
+
+        Returns
+        -------
+        x : array
+            medioid
+        ix : int
+            index of medioid
+
+        """
+        # Initiate an array with infinities
+        A = np.full((X.shape[0],), np.inf)
+
+        # Insert sum of distances to other points
+        A[Y] = np.sum(squareform(pdist(X[Y, :])), axis=1)
+
+        # Find the index of the point with the smallest distance
+        ix = np.argmin(A)
+
+        return X[ix, :], ix
+
+    def reg_cov(self, X):
+        """
+        Regularize covariance matrix until non-singular.
+
+        Parameters
+        ----------
+        C : array
+            square symmetric covariance matrix.
+
+        Returns
+        -------
+        C : array
+            regularized covariance matrix.
+
+        """
+        # Number of data points
+        N = X.shape[0]
+
+        # Compute mean of data
+        muX = np.mean(X, axis=0, keepdims=1)
+
+        # Compute covariance matrix without regularization
+        SX = (X - muX).T @ (X - muX) / N
+
+        # Initialize regularization parameter
+        reg = 1e-6
+
+        # Keep going until non-singular
+        while not self.is_pos_def(SX):
+
+            # Compute covariance matrix with regularization
+            SX = (X - muX).T @ (X - muX) / N + reg*np.eye(X.shape[1])
+
+            # Increment reg
+            reg *= 10
+
+        # Report regularization
+        print('Final regularization parameter = {}'.format(reg))
+
+        return SX
 
     def align_classes(self, X, Y, Z, u, CX, CZ, V):
         """
@@ -570,7 +743,7 @@ class SemiSubspaceAlignedClassifier(object):
                 print('Reducing subspace dim to {}'.format(subspace_dim))
 
         # Total covariance matrix of target data
-        SZ = np.cov((Z - np.mean(Z, axis=0, keepdims=1)).T)
+        SZ = self.reg_cov(Z)
 
         # Eigendecomposition for first d eigenvectors
         valZ, vecZ = eigh(SZ, eigvals=(DZ - subspace_dim, DZ-1))
@@ -594,8 +767,8 @@ class SemiSubspaceAlignedClassifier(object):
             muZk = np.mean(Z[U == k, :], axis=0, keepdims=1)
 
             # Compute covariance matrix of current class
-            SXk = np.cov((X[Y == k, :] - muXk).T)
-            SZk = np.cov((Z[U == k, :] - muZk).T)
+            SXk = self.reg_cov(X[Y == k, :])
+            SZk = self.reg_cov(Z[U == k, :])
 
             # Eigendecomposition for first d eigenvectors
             valX, vecX = eigh(SXk, eigvals=(DX - subspace_dim, DX-1))
@@ -712,7 +885,6 @@ class SemiSubspaceAlignedClassifier(object):
 
         # Compute error
         return np.mean(preds != U)
-
 
     def predict(self, Z, zscore=False):
         """
