@@ -1,8 +1,11 @@
-# Temporal Domain Adaptation for Natural Language Processing
+# Temporal Domain Adaptation for NLP.
 
-Temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings.
+Temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings. Paper is currently under submission.
 
-NLP tasks currently tackled include rumour stance and veracity prediction, annual paper acceptance prediction, and temporal named entity recognition.
+Natural Language Processing tasks currently tackled:
+- rumour stance and veracity prediction
+- annual paper acceptance prediction
+- temporal named entity recognition.
 
 ## Contact
 Questions, comments and feedback can be submitted to the [issues tracker](https://github.com/wmkouw/tda-nlp/issues).
