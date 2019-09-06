@@ -1,11 +1,11 @@
-# Temporal Domain Adaptation for NLP.
+# Sequential Subspace Alignment for NLP
 
-Temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings. Paper is currently under submission.
+Repository contains code and experiments for temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings. Paper is currently under submission.
 
 Natural Language Processing tasks currently tackled:
+- temporal named entity recognition.
 - rumour stance and veracity prediction
 - annual paper acceptance prediction
-- temporal named entity recognition.
 
 ## Contact
-Questions, comments and feedback can be submitted to the [issues tracker](https://github.com/wmkouw/tda-nlp/issues).
+Questions, comments and feedback can be submitted to the [issues tracker](https://github.com/wmkouw/ssa-nlp/issues).
