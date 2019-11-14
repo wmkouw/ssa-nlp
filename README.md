@@ -4,7 +4,7 @@ Repository contains code and experiments for temporal domain adaptation in the f
 
 "Back to the future -- Sequential alignment of text representations"
 
-which is to be presented at the AAAI Conference on Artificial Intelligence, 2020.
+which is to be presented at the AAAI Conference on Artificial Intelligence, 2020 ([preprint](https://arxiv.org/abs/1909.03464)).
 
 Natural Language Processing tasks currently tackled:
 - temporal named entity recognition.
