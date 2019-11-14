@@ -1,6 +1,10 @@
 # Sequential Subspace Alignment for NLP
 
-Repository contains code and experiments for temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings. Paper is currently under submission.
+Repository contains code and experiments for temporal domain adaptation in the form of semi-supervised subspace alignment for word embeddings. It accompanies the paper
+
+"Back to the future -- Sequential alignment of text representations"
+
+which is to be presented at the AAAI Conference on Artificial Intelligence, 2020.
 
 Natural Language Processing tasks currently tackled:
 - temporal named entity recognition.
