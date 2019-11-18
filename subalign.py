@@ -463,7 +463,8 @@ class SemiSubspaceAlignedClassifier(object):
     def __init__(self,
                  loss_function='logistic',
                  l2_regularization=None,
-                 subspace_dim=1):
+                 subspace_dim=1,
+                 verbose=True):
         """
         Select a particular type of subspace aligned classifier.
 
@@ -476,7 +477,9 @@ class SemiSubspaceAlignedClassifier(object):
             l2-regularization parameter value (def:0.01)
         subspace_dim : int
             Dimensionality of subspace to retain (def: 1)
-
+	    verbose : Bool
+            Whether to report to user (def: True)
+	
         Returns
         -------
         None
@@ -486,6 +489,7 @@ class SemiSubspaceAlignedClassifier(object):
         self.loss = loss_function
         self.l2 = l2_regularization
         self.subdim = subspace_dim
+        self.verbose = verbose
 
         # Initialize untrained classifiers
         if self.loss in ('lr', 'logr', 'logistic'):
@@ -606,7 +610,7 @@ class SemiSubspaceAlignedClassifier(object):
         SX = (X - muX).T @ (X - muX) / N
 
         # Initialize regularization parameter
-        reg = 1e-6
+        reg = 1e-8
 
         # Keep going until non-singular
         while not self.is_pos_def(SX):
@@ -618,7 +622,8 @@ class SemiSubspaceAlignedClassifier(object):
             reg *= 10
 
         # Report regularization
-        print('Final regularization parameter = {}'.format(reg))
+        if self.verbose:
+            print('Final regularization parameter = {}'.format(reg))
 
         return SX
 
@@ -665,8 +670,11 @@ class SemiSubspaceAlignedClassifier(object):
 
         for k in range(K):
 
+            # Find mean of k-th class
+            muXk = np.mean(X[Y == k, :], axis=0, keepdims=1)
+
             # Project the k-th class
-            XV[Y == k, :] = X[Y == k, :] @ CX[k] @ V[k]
+            XV[Y == k, :] = (X[Y == k, :] - muXk) @ CX[k] @ V[k]
 
             # Indices of all target samples with label k
             uk = u[u[:, 1] == k, 0]
@@ -674,18 +682,15 @@ class SemiSubspaceAlignedClassifier(object):
             # Mean of labeled target samples
             muZk = np.mean(Z[uk, :], axis=0, keepdims=1)
 
-            # Remove mean after projection
-            XV[Y == k, :] -= np.mean(XV[Y == k, :], axis=0, keepdims=1)
-
             # Center the projected class on mean of labeled target samples
-            XV[Y == k, :] += muZk @ CZ
+            XV[Y == k, :] += (muZk @ CZ)
 
         # Project target data onto components
         Z = Z @ CZ
 
         return XV, Z
 
-    def semi_subspace_alignment(self, X, Y, Z, u, subspace_dim=1):
+    def semi_subspace_alignment(self, X, Y, Z, u, subspace_dim=1, pseudo_labeling=True, num_neighbours=1):
         """
         Compute subspace and alignment matrix, for each class.
 
@@ -702,6 +707,10 @@ class SemiSubspaceAlignedClassifier(object):
             (m samples x 2)
         subspace_dim : int
             Dimensionality of subspace to retain (def: 1)
+        pseudo_labeling : int
+            Whether to pseudo-label target samples for class-specific covariance matrix estimation
+        num_neighbours : int
+	        Number of neighbours to use when pseudo-classifying target samples
 
         Returns
         -------
@@ -739,8 +748,9 @@ class SemiSubspaceAlignedClassifier(object):
                 # Reduce subspace dim
                 subspace_dim = min(subspace_dim, Nk)
 
-                # Report
-                print('Reducing subspace dim to {}'.format(subspace_dim))
+            # Report
+            if self.verbose:
+	            print('Reducing subspace dim to {}'.format(subspace_dim))
 
         # Total covariance matrix of target data
         SZ = self.reg_cov(Z)
@@ -751,35 +761,61 @@ class SemiSubspaceAlignedClassifier(object):
         # Sort eigenvectors x descending eigenvalues
         CZ = vecZ[:, np.argsort(np.real(valZ))[::-1]]
 
-        # Use k-nn to label target samples
-        kNN = KNeighborsClassifier(n_neighbors=1)
-        U = kNN.fit(Z[u[:, 0], :], u[:, 1]).predict(Z)
-
         # Preallocate
         CX = np.zeros((K, DX, subspace_dim))
         V = np.zeros((K, subspace_dim, subspace_dim))
 
-        # For each class, align components
-        for k in range(K):
+        if pseudo_labeling:
 
-            # Take means
-            muXk = np.mean(X[Y == k, :], axis=0, keepdims=1)
-            muZk = np.mean(Z[U == k, :], axis=0, keepdims=1)
+            # Use k-nn to label target samples
+            kNN = KNeighborsClassifier(n_neighbors=num_neighbours)
+            U = kNN.fit(Z[u[:, 0], :], u[:, 1]).predict(Z)
 
-            # Compute covariance matrix of current class
-            SXk = self.reg_cov(X[Y == k, :])
-            SZk = self.reg_cov(Z[U == k, :])
+            # For each class, align components
+            for k in range(K):
 
-            # Eigendecomposition for first d eigenvectors
-            valX, vecX = eigh(SXk, eigvals=(DX - subspace_dim, DX-1))
-            valZ, vecZ = eigh(SZk, eigvals=(DZ - subspace_dim, DZ-1))
+                # Take means
+                muXk = np.mean(X[Y == k, :], axis=0, keepdims=1)
+                muZk = np.mean(Z[U == k, :], axis=0, keepdims=1)
 
-            # Sort based on descending eigenvalues
-            CX[k] = vecX[:, np.argsort(np.real(valX))[::-1]]
-            vecZ = vecZ[:, np.argsort(np.real(valZ))[::-1]]
+                # Compute covariance matrix of current class
+                SXk = self.reg_cov(X[Y == k, :])
+                SZk = self.reg_cov(Z[U == k, :])
 
-            # Aligned source components
-            V[k] = CX[k].T @ vecZ
+                # Eigendecomposition for first d eigenvectors
+                valX, vecX = eigh(SXk, eigvals=(DX - subspace_dim, DX-1))
+                valZ, vecZ = eigh(SZk, eigvals=(DZ - subspace_dim, DZ-1))
+
+                # Sort based on descending eigenvalues
+                CX[k] = vecX[:, np.argsort(np.real(valX))[::-1]]
+                vecZ = vecZ[:, np.argsort(np.real(valZ))[::-1]]
+
+                # Aligned source components
+                V[k] = CX[k].T @ vecZ
+
+        else:
+
+            # For each class, align components
+            for k in range(K):
+
+                # Take means
+                muXk = np.mean(X[Y == k, :], axis=0, keepdims=1)
+                muZk = np.mean(Z[u[:, k], :], axis=0, keepdims=1)
+
+                # Compute covariance matrix of current class
+                SXk = self.reg_cov(X[Y == k, :])
+                SZk = self.reg_cov(Z[u[:, k], :])
+
+                # Eigendecomposition for first d eigenvectors
+                valX, vecX = eigh(SXk, eigvals=(DX - subspace_dim, DX-1))
+                valZ, vecZ = eigh(SZk, eigvals=(DZ - subspace_dim, DZ-1))
+
+                # Sort based on descending eigenvalues
+                CX[k] = vecX[:, np.argsort(np.real(valX))[::-1]]
+                vecZ = vecZ[:, np.argsort(np.real(valZ))[::-1]]
+
+                # Aligned source components
+                V[k] = CX[k].T @ vecZ
 
         # Return transformation matrix and principal component coefficients
         return V, CX, CZ
